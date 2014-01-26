@@ -76,7 +76,12 @@ def roto_scale(tetra, relative_rotation, absolute_rotation):
     scale = a / math.cos(math.pi/3 - relative_rotation)
     tetra.scale = (scale, scale, scale)
 
-def relative_roto_scaler(tetras, rotation, num_keyframes=20, frames_between_keyframes=2, keyframe_offset=0):
+def relative_roto_scaler(tetras, rotation, num_keyframes=20, keyframe_offset=0):
+    '''
+    Rotates and scales teselated equilateral triangles so the rotated versions still fit within their original boundries.
+    Uses only relative rotation as basis for scaling so
+    only use for complete rotations X*2*math.pi/3
+    '''
     a = math.sin(math.pi / 6)
     for tetra in tetras:
         rot_per_frame = rotation / (num_keyframes - 1)
@@ -87,16 +92,21 @@ def relative_roto_scaler(tetras, rotation, num_keyframes=20, frames_between_keyf
         tetra.rotation_euler.rotate_axis('Z', -rot_per_frame)
         for frame in range(num_keyframes):
             tetra.rotation_euler.rotate_axis('Z', rot_per_frame)
-            tetra.keyframe_insert('rotation_euler', frame = (keyframe_offset + frame) * frames_between_keyframes)
+            tetra.keyframe_insert('rotation_euler', frame = keyframe_offset + frame)
 
             scale = a / math.cos(math.pi/3 - angle)
             tetra.scale = (scale, scale, scale)
-            tetra.keyframe_insert('scale', frame = (keyframe_offset + frame) * frames_between_keyframes)
+            tetra.keyframe_insert('scale', frame = keyframe_offset + frame)
 
             print("%s) frame %s, angle: %s, scale %s, XYZ %s\n"%(tetra.name, frame, angle, scale, tetra.rotation_euler))
             angle += rot_per_frame
 
 def roto_scaler(tetras, rotation, angle_offset=0, num_keyframes=20, frames_between_keyframes=2, keyframe_offset=0):
+    '''
+    Rotates and scales teselated equilateral triangles so the rotated versions still fit within their original boundries.
+    Uses absolute rotation as basis for scaling so any angle can be used
+    but the original orientation (angle_offset) must be supplied
+    '''
     a = math.sin(math.pi / 6)
     for tetra in tetras:
         tetra.rotation_mode = 'AXIS_ANGLE'
@@ -115,18 +125,26 @@ def roto_scaler(tetras, rotation, angle_offset=0, num_keyframes=20, frames_betwe
 
 ############ OBJECT TO TETRAS ###############
 def alignment_matrix(v1, v2):
+    '''
+    Returns a rotation matrix that aligns the first vector to the second
+    '''
     axis = v1.cross(v2)
     angle = math.acos(v1.dot(v2))
     return mathutils.Matrix.Rotation(angle, 4, axis)
 
-''' does the actual transformation ''' 
 def transform_object_container(obj, matrix):
+    '''Transforms the origin of a shape without transforming the shape''' 
     # transform the object
     obj.matrix_local = obj.matrix_local * matrix
     # transform the mesh
     obj.data.transform(matrix.inverted())
 
 def polygon_to_tetra(poly, mesh):
+    '''
+    Converts a triangular polygon that is part of a mesh to a tetrahedron
+    whos base is the original triangle and apex is side length along
+    the normal from the polygon's origin
+    '''
     # create a new mesh
     me = bpy.data.meshes.new("Tetra%s"%poly.index)
     # create a new object from the mesh
@@ -173,6 +191,10 @@ def polygon_to_tetra(poly, mesh):
     return ob
 
 def mesh_to_tetras(mesh, splitter = lambda f: f.index % 2 == 0):
+    '''
+    Converts an entire mesh to tetrahedrons with polygon_to_tetra.
+    Splits the list of new tetrahedrons into two lists
+    '''
     up_tetras = []
     down_tetras = []
     for p in mesh.data.polygons:
@@ -202,6 +224,6 @@ def test():
     #roto_scaler_test(up_tetras, down_tetras)
     # frames_between_keyframe=1 because the interpolation does weird things to
     # the rotation
-    relative_roto_scaler(down_tetras, 2*math.pi/3, frames_between_keyframes=1, num_keyframes=10)
-    #relative_roto_scaler(up_tetras, 2*math.pi/3, num_keyframes=10, keyframe_offset=9)
+    relative_roto_scaler(down_tetras, 2*math.pi/3, num_keyframes=30)
+    relative_roto_scaler(up_tetras, 2*math.pi/3, num_keyframes=30, keyframe_offset=29)
     
