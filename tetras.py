@@ -1,5 +1,7 @@
 import bpy
 import math
+import mathutils
+import copy
 
 # filename = "/home/charlieb/src/blender/tetras.py"
 # exec(compile(open(filename).read(), filename, 'exec'))
@@ -69,6 +71,31 @@ def scaler(tetras):
             tetra.scale = (scale_factor, scale_factor, scale_factor)
             tetra.keyframe_insert('scale', frame = frame * 10)
 
+def roto_scale(tetra, relative_rotation, absolute_rotation):
+    tetra.rotation_axis_angle = (absolute_rotation, 0,0,1)
+    scale = a / math.cos(math.pi/3 - relative_rotation)
+    tetra.scale = (scale, scale, scale)
+
+def relative_roto_scaler(tetras, rotation, num_keyframes=20, frames_between_keyframes=2, keyframe_offset=0):
+    a = math.sin(math.pi / 6)
+    for tetra in tetras:
+        rot_per_frame = rotation / (num_keyframes - 1)
+        angle = 0
+        tetra.rotation_mode = 'XYZ'
+        # back off one iteration so that the 0th frame will be
+        # at the current rotation
+        tetra.rotation_euler.rotate_axis('Z', -rot_per_frame)
+        for frame in range(num_keyframes):
+            tetra.rotation_euler.rotate_axis('Z', rot_per_frame)
+            tetra.keyframe_insert('rotation_euler', frame = (keyframe_offset + frame) * frames_between_keyframes)
+
+            scale = a / math.cos(math.pi/3 - angle)
+            tetra.scale = (scale, scale, scale)
+            tetra.keyframe_insert('scale', frame = (keyframe_offset + frame) * frames_between_keyframes)
+
+            print("%s) frame %s, angle: %s, scale %s, XYZ %s\n"%(tetra.name, frame, angle, scale, tetra.rotation_euler))
+            angle += rot_per_frame
+
 def roto_scaler(tetras, rotation, angle_offset=0, num_keyframes=20, frames_between_keyframes=2, keyframe_offset=0):
     a = math.sin(math.pi / 6)
     for tetra in tetras:
@@ -79,24 +106,102 @@ def roto_scaler(tetras, rotation, angle_offset=0, num_keyframes=20, frames_betwe
             angle = start_angle - angle_offset + rotation * frame / (num_keyframes - 1)
             tetra.rotation_axis_angle = (angle + angle_offset, 0,0,1)
             tetra.keyframe_insert('rotation_axis_angle', frame = (keyframe_offset + frame) * frames_between_keyframes)
-            # original scale - the scale change
             scale = a / math.cos(math.pi/3 - angle)
+            scale = 1
             tetra.scale = (scale, scale, scale)
             tetra.keyframe_insert('scale', frame = (keyframe_offset + frame) * frames_between_keyframes)
             if tetra == tetras[0]:
                 print("%s angle: %s - %s + %s = %s\n"%(frame, start_angle, angle_offset, (frame / num_keyframes) * rotation, angle))
 
+############ OBJECT TO TETRAS ###############
+def alignment_matrix(v1, v2):
+    axis = v1.cross(v2)
+    angle = math.acos(v1.dot(v2))
+    return mathutils.Matrix.Rotation(angle, 4, axis)
 
-def test():
-    up_tetras, down_tetras = tetra_grid(15)
+''' does the actual transformation ''' 
+def transform_object_container(obj, matrix):
+    # transform the object
+    obj.matrix_local = obj.matrix_local * matrix
+    # transform the mesh
+    obj.data.transform(matrix.inverted())
+
+def polygon_to_tetra(poly, mesh):
+    # create a new mesh
+    me = bpy.data.meshes.new("Tetra%s"%poly.index)
+    # create a new object from the mesh
+    ob = bpy.data.objects.new("Tetra", me)
+    # Add the object to the scene
+    bpy.context.scene.objects.link(ob) 
+    # copy the coords from the poly (triangle) to the new mesh
+    pc = poly.center
+    '''
+    print(list(pc))
+    print(((mesh.data.vertices[0].co.x + mesh.data.vertices[1].co.x + mesh.data.vertices[2].co.x) / 3,
+           (mesh.data.vertices[0].co.y + mesh.data.vertices[1].co.y + mesh.data.vertices[2].co.y) / 3,
+           (mesh.data.vertices[0].co.z + mesh.data.vertices[1].co.z + mesh.data.vertices[2].co.z) / 3))
+    print('-------------')
+    '''
+    coords = [(
+        mesh.data.vertices[idx].co.x - pc[0],
+        mesh.data.vertices[idx].co.y - pc[1],
+        mesh.data.vertices[idx].co.z - pc[2])
+            for idx in poly.vertices]
+    # find the length of one side
+    dx = coords[0][0] - coords[1][0]
+    dy = coords[0][1] - coords[1][1]
+    dz = coords[0][2] - coords[1][2]
+    # use that length to scale the normal
+    # TODO: calculate the corred scale: this is too long
+    # because it's the distance between the center of the face and the apex
+    # but here calculated is just the side length
+    scl = math.sqrt(dx*dx + dy*dy + dz*dz)
+    # add the top of the tetra along the normal direction of the poly
+    pn = poly.normal
+    coords.append((pn.x * scl, pn.y * scl, pn.z * scl))
+    # build faces from vector indeces
+    faces = [(0,1,2), (0,1,3), (1,2,3), (2,0,3)]
+    me.from_pydata(coords,[],faces)
+    me.update(calc_edges=True)
+
+    # Align the local z of the mesh to the poly's normal
+    am = alignment_matrix(mathutils.Vector((0,0,1)), poly.normal)
+    transform_object_container(ob, am)
+    # center the object on the poly
+    ob.location = poly.center
+
+    return ob
+
+def mesh_to_tetras(mesh, splitter = lambda f: f.index % 2 == 0):
+    up_tetras = []
+    down_tetras = []
+    for p in mesh.data.polygons:
+        if splitter(p):
+            up_tetras.append(polygon_to_tetra(p, mesh))
+        else:
+            down_tetras.append(polygon_to_tetra(p, mesh))
+    return up_tetras, down_tetras
+
+
+############ TESTINMG ############## 
+
+def scaler_test(up_tetras, down_tetras):
     all_tetras = up_tetras.copy()
     all_tetras.extend(down_tetras)
-    #scaler(all_tetras)
+    scaler(all_tetras)
+
+def roto_scaler_test(up_tetras, down_tetras):
     roto_scaler(down_tetras, math.pi/3, angle_offset=math.pi, num_keyframes=10)
-    print('-----------------')
     roto_scaler(down_tetras, math.pi/3, angle_offset=math.pi, num_keyframes=10, keyframe_offset=9)
     roto_scaler(up_tetras, 2*math.pi/3, num_keyframes=20, keyframe_offset=18)
 
+def test():
+    up_tetras, down_tetras = mesh_to_tetras(bpy.context.object)
+    #up_tetras, down_tetras = tetra_grid(15)
 
+    #roto_scaler_test(up_tetras, down_tetras)
+    # frames_between_keyframe=1 because the interpolation does weird things to
+    # the rotation
+    relative_roto_scaler(down_tetras, 2*math.pi/3, frames_between_keyframes=1, num_keyframes=10)
+    #relative_roto_scaler(up_tetras, 2*math.pi/3, num_keyframes=10, keyframe_offset=9)
     
-test()
