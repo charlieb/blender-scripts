@@ -98,7 +98,7 @@ def relative_roto_scaler(tetras, rotation, num_keyframes=20, keyframe_offset=0):
             tetra.scale = (scale, scale, scale)
             tetra.keyframe_insert('scale', frame = keyframe_offset + frame)
 
-            print("%s) frame %s, angle: %s, scale %s, XYZ %s\n"%(tetra.name, frame, angle, scale, tetra.rotation_euler))
+            #print("%s) frame %s, angle: %s, scale %s, XYZ %s\n"%(tetra.name, frame, angle, scale, tetra.rotation_euler))
             angle += rot_per_frame
 
 def roto_scaler(tetras, rotation, angle_offset=0, num_keyframes=20, frames_between_keyframes=2, keyframe_offset=0):
@@ -120,8 +120,8 @@ def roto_scaler(tetras, rotation, angle_offset=0, num_keyframes=20, frames_betwe
             scale = 1
             tetra.scale = (scale, scale, scale)
             tetra.keyframe_insert('scale', frame = (keyframe_offset + frame) * frames_between_keyframes)
-            if tetra == tetras[0]:
-                print("%s angle: %s - %s + %s = %s\n"%(frame, start_angle, angle_offset, (frame / num_keyframes) * rotation, angle))
+            #if tetra == tetras[0]:
+            #    print("%s angle: %s - %s + %s = %s\n"%(frame, start_angle, angle_offset, (frame / num_keyframes) * rotation, angle))
 
 ############ OBJECT TO TETRAS ###############
 def alignment_matrix(v1, v2):
@@ -203,6 +203,34 @@ def mesh_to_tetras(mesh, splitter = lambda f: f.index % 2 == 0):
         else:
             down_tetras.append(polygon_to_tetra(p, mesh))
     return up_tetras, down_tetras
+
+########### SPHERE SHIVER ##########
+
+def shiver_along_axis(tetras):
+    frames_per = 10
+    steps = 60
+    z = z_end = tetras[0].location.z
+    for t in tetras:
+        if t.location.z > z: z = t.location.z
+        if t.location.z < z_end: z_end = t.location.z
+    z_step = (z_end - z) / steps
+    for frame in range(steps):
+        tets = [tetra for tetra in tetras 
+                if tetra.location.z <= z and 
+                    tetra.location.z >= z + z_step]
+        relative_roto_scaler(tets,
+            2 * math.pi / 3,
+            num_keyframes = 25,
+            keyframe_offset = 2 * frame)
+        print(z)
+        z += z_step
+
+
+def shiver():
+    tetras, _ = mesh_to_tetras(bpy.context.object, splitter=lambda _: True)
+    shiver_along_axis(tetras)
+
+
 
 
 ############ TESTINMG ############## 
