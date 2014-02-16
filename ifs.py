@@ -72,18 +72,16 @@ def generate_ifs_points(npoints):
     me.update()
     return me, ob
 
-def regenerate_ifs_points(mesh):
+def regenerate_ifs_points(vertices):
     transforms = [object_transform(obj) for obj in bpy.context.selected_objects]
     i = 0
-    for p in ifs(transforms, len(mesh.vertices)+100, ignore_first_n=100):
-        mesh.vertices[i].co = (p.x, p.y, p.z)
+    for p in ifs(transforms, len(vertices)+100, ignore_first_n=100):
+        vertices[i].co = (p.x, p.y, p.z)
         #mesh.vertices[i].co.x = p.x
         #mesh.vertices[i].co.y = p.y
         #mesh.vertices[i].co.z = p.z
         #print("%s: %s"%(i,p))
         i += 1
-    #mesh.update()
-    return mesh
 
 def generate_ifs_objects(npoints):
     transforms = [object_transform(obj) for obj in bpy.context.selected_objects]
@@ -133,7 +131,7 @@ def generate_ifs_animation(npoints, frame_start=0, frame_end=250):
         key.keyframe_insert('value', frame=fr)
         # Move the vertices
         #obj.editmode_toggle()
-        mesh = regenerate_ifs_points(mesh)
+        regenerate_ifs_points(key.data)
         #obj.editmode_toggle()
         # set the end of the previous shape key
         key.value = 1
