@@ -70,6 +70,21 @@ def generate_ifs_points(npoints):
         me.vertices.add(1)
         me.vertices[-1].co = (p.x, p.y, p.z)
     me.update()
+    return me, ob
+
+def regenerate_ifs_points(mesh):
+    transforms = [object_transform(obj) for obj in bpy.context.selected_objects]
+    i = 0
+    for p in ifs(transforms, len(mesh.vertices)+100, ignore_first_n=100):
+        #mesh.vertices[i].co = (p.x, p.y, p.z)
+        mesh.vertices[i].co.x = p.x
+        mesh.vertices[i].co.y = p.y
+        mesh.vertices[i].co.z = p.z
+        print("%s : %s"%(i,p))
+        i += 1
+    mesh.update()
+    return mesh
+
 
 def generate_ifs_object(npoints):
     transforms = [object_transform(obj) for obj in bpy.context.selected_objects]
@@ -86,19 +101,19 @@ def generate_ifs_object(npoints):
     bpy.context.scene.objects.link(ob) 
     me.from_pydata(verts,[],faces)
     me.update(calc_edges=True)
+    return me
 
-def generate_ifs_spheres(npoints):
-    transforms = [object_transform(obj) for obj in bpy.context.selected_objects]
-    verts = []
-    faces = []
-    for p in ifs(transforms, npoints+100, ignore_first_n=100):
-        add_triangle(p, verts, faces)
-    
-    # create a new mesh
-    me = bpy.data.meshes.new("ifs")
-    # create a new object from the mesh
-    ob = bpy.data.objects.new("IFS", me)
-    # Add the object to the scene
-    bpy.context.scene.objects.link(ob) 
-    me.from_pydata(verts,[],faces)
-    me.update(calc_edges=True)
+def generate_ifs_animation(npoints, frame_start=0, frame_end=250):
+    bpy.context.scene.frame_set(frame_start)
+    mesh, obj = generate_ifs_points(npoints)
+    obj.shape_key_add("IFS%s"%0)
+    obj.data.shape_keys.key_blocks["IFS%s"%0].value = 0 / (frame_end - frame_start) 
+    obj.data.shape_keys.key_blocks["IFS%s"%0].keyframe_insert('value')
+    for fr in range(frame_start+1, frame_end):
+        bpy.context.scene.frame_set(fr)
+        mesh = regenerate_ifs_points(mesh)
+        obj.shape_key_add("IFS%s"%fr)
+        obj.data.shape_keys.key_blocks["IFS%s"%fr].value = fr / (frame_end - frame_start) 
+        obj.data.shape_keys.key_blocks["IFS%s"%fr].keyframe_insert('value')
+
+
