@@ -76,15 +76,32 @@ def regenerate_ifs_points(mesh):
     transforms = [object_transform(obj) for obj in bpy.context.selected_objects]
     i = 0
     for p in ifs(transforms, len(mesh.vertices)+100, ignore_first_n=100):
-        #mesh.vertices[i].co = (p.x, p.y, p.z)
-        mesh.vertices[i].co.x = p.x
-        mesh.vertices[i].co.y = p.y
-        mesh.vertices[i].co.z = p.z
-        print("%s : %s"%(i,p))
+        mesh.vertices[i].co = (p.x, p.y, p.z)
+        #mesh.vertices[i].co.x = p.x
+        #mesh.vertices[i].co.y = p.y
+        #mesh.vertices[i].co.z = p.z
+        #print("%s: %s"%(i,p))
         i += 1
-    mesh.update()
+    #mesh.update()
     return mesh
 
+def generate_ifs_objects(npoints):
+    transforms = [object_transform(obj) for obj in bpy.context.selected_objects]
+    objs = []
+    first = False
+    for p in ifs(transforms, npoints+100, ignore_first_n=100):
+        bpy.ops.mesh.primitive_uv_sphere_add(
+                segments=5, 
+                ring_count=5,
+                size=0.01,
+                location=(p.x, p.y, p.z))
+        obj = bpy.context.object
+        if first:
+            obj.parent = first
+        else:
+            first = obj
+        objs.append(obj)
+    return objs
 
 def generate_ifs_object(npoints):
     transforms = [object_transform(obj) for obj in bpy.context.selected_objects]
@@ -106,14 +123,23 @@ def generate_ifs_object(npoints):
 def generate_ifs_animation(npoints, frame_start=0, frame_end=250):
     bpy.context.scene.frame_set(frame_start)
     mesh, obj = generate_ifs_points(npoints)
-    obj.shape_key_add("IFS%s"%0)
-    obj.data.shape_keys.key_blocks["IFS%s"%0].value = 0 / (frame_end - frame_start) 
-    obj.data.shape_keys.key_blocks["IFS%s"%0].keyframe_insert('value')
-    for fr in range(frame_start+1, frame_end):
+    obj.shape_key_add("Basis")
+    # Create the first shapekey
+    for fr in range(frame_start, frame_end):
         bpy.context.scene.frame_set(fr)
+        # Add a new shapekey
+        key = obj.shape_key_add("IFS%s"%fr)
+        key.value = 0
+        key.keyframe_insert('value', frame=fr)
+        # Move the vertices
+        #obj.editmode_toggle()
         mesh = regenerate_ifs_points(mesh)
-        obj.shape_key_add("IFS%s"%fr)
-        obj.data.shape_keys.key_blocks["IFS%s"%fr].value = fr / (frame_end - frame_start) 
-        obj.data.shape_keys.key_blocks["IFS%s"%fr].keyframe_insert('value')
+        #obj.editmode_toggle()
+        # set the end of the previous shape key
+        key.value = 1
+        key.keyframe_insert('value', frame=fr+1)
+        # unset the current shapekey so it doesn't screw up the next one
+        key.value = 0
+        key.keyframe_insert('value', frame=fr+2)
 
 
