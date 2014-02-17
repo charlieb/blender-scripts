@@ -18,11 +18,12 @@ def transform_order(transforms, n):
         yield(trans, i)
 
 
-def ifs(transforms, npoints, ignore_first_n=100, pt = mathutils.Vector((0,0,0,1))):
+def ifs(transforms, npoints, ignore_first_n=100, pt = mathutils.Vector((0,0,0,1)), transform_order_cache=False):
     dets = [t.determinant() for t in transforms]
     total_dets = sum(dets)
     dets = [d/total_dets for d in dets]
-    for trans, n in transform_order(transforms, npoints):
+    for trans, n in (transform_order_cache if transform_order_cache
+                                           else transform_order(transforms, npoints)):
         pt = transforms[trans] * pt
         if n > ignore_first_n:
             yield(copy.deepcopy(pt))
@@ -57,7 +58,7 @@ def save_ifs_point_cloud(filename, npoints):
     f.close()
 
 
-def generate_ifs_points(npoints):
+def generate_ifs_points(npoints, transform_order_cache=False):
     transforms = [object_transform(obj) for obj in bpy.context.selected_objects]
     
     # create a new mesh
@@ -66,40 +67,19 @@ def generate_ifs_points(npoints):
     ob = bpy.data.objects.new("IFS", me)
     # Add the object to the scene
     bpy.context.scene.objects.link(ob) 
-    for p in ifs(transforms, npoints+100, ignore_first_n=100):
+    for p in ifs(transforms, npoints+100, ignore_first_n=100, transform_order_cache=transform_order_cache):
         me.vertices.add(1)
         me.vertices[-1].co = (p.x, p.y, p.z)
     me.update()
-    return me, ob
+    return ob
 
-def regenerate_ifs_points(vertices):
+def regenerate_ifs_points(vertices, transform_order_cache=False):
     transforms = [object_transform(obj) for obj in bpy.context.selected_objects]
     i = 0
-    for p in ifs(transforms, len(vertices)+100, ignore_first_n=100):
+    for p in ifs(transforms, len(vertices)+100, ignore_first_n=100, transform_order_cache=transform_order_cache):
         vertices[i].co = (p.x, p.y, p.z)
-        #mesh.vertices[i].co.x = p.x
-        #mesh.vertices[i].co.y = p.y
-        #mesh.vertices[i].co.z = p.z
         #print("%s: %s"%(i,p))
         i += 1
-
-def generate_ifs_objects(npoints):
-    transforms = [object_transform(obj) for obj in bpy.context.selected_objects]
-    objs = []
-    first = False
-    for p in ifs(transforms, npoints+100, ignore_first_n=100):
-        bpy.ops.mesh.primitive_uv_sphere_add(
-                segments=5, 
-                ring_count=5,
-                size=0.01,
-                location=(p.x, p.y, p.z))
-        obj = bpy.context.object
-        if first:
-            obj.parent = first
-        else:
-            first = obj
-        objs.append(obj)
-    return objs
 
 def generate_ifs_object(npoints):
     transforms = [object_transform(obj) for obj in bpy.context.selected_objects]
@@ -118,9 +98,9 @@ def generate_ifs_object(npoints):
     me.update(calc_edges=True)
     return me
 
-def generate_ifs_animation(npoints, frame_start=0, frame_end=250):
+def generate_ifs_animation(npoints, frame_start=0, frame_end=250, transform_order_cache=False):
     bpy.context.scene.frame_set(frame_start)
-    mesh, obj = generate_ifs_points(npoints)
+    obj = generate_ifs_points(npoints, transform_order_cache=transform_order_cache)
     obj.shape_key_add("Basis")
     # Create the first shapekey
     for fr in range(frame_start, frame_end):
@@ -131,7 +111,7 @@ def generate_ifs_animation(npoints, frame_start=0, frame_end=250):
         key.keyframe_insert('value', frame=fr)
         # Move the vertices
         #obj.editmode_toggle()
-        regenerate_ifs_points(key.data)
+        regenerate_ifs_points(key.data, transform_order_cache=transform_order_cache)
         #obj.editmode_toggle()
         # set the end of the previous shape key
         key.value = 1
@@ -140,4 +120,10 @@ def generate_ifs_animation(npoints, frame_start=0, frame_end=250):
         key.value = 0
         key.keyframe_insert('value', frame=fr+2)
 
+        print("Frame: %s"%fr)
 
+def generate_ifs_animation_caching(npoints, frame_start=0, frame_end=250):
+    transforms = [object_transform(obj) for obj in bpy.context.selected_objects]
+    to = list(transform_order(transforms, npoints))
+    print(len(to))
+    generate_ifs_animation(npoints, frame_start=frame_start, frame_end=frame_end, transform_order_cache=to)
